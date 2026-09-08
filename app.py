@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 from flask import Flask, render_template, request, jsonify
 import boto3
 from pymongo import MongoClient
@@ -50,7 +51,7 @@ s3_client = boto3.client(
 ai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
-# --- HELPER FUNCTION: Enforce Exact Rules & Structured Fallbacks ---
+# --- HELPER FUNCTION: Enforce All Custom Business Rules & Fallbacks ---
 def process_and_enforce_rules(data, s3_urls):
     if isinstance(data, str):
         try:
@@ -79,12 +80,9 @@ def process_and_enforce_rules(data, s3_urls):
     except ValueError:
         bath_num = 1
 
-    if bath_num >= 4:
-        balconies_val = "2"
-    else:
-        balconies_val = "1"
+    balconies_val = "2" if bath_num >= 4 else "1"
 
-    # --- RULE 2: Built-up / Carpet / Super Built-up Area Auto Calculation ---
+    # --- RULE 2: Built-up / Carpet / Super Built-up Area Math ---
     builtup = str(spec.get("builtup_sqft", "na")).strip()
     carpet = str(spec.get("carpet_sqft", "na")).strip()
     super_built = str(spec.get("super_builtup_sqft", "na")).strip()
@@ -100,22 +98,16 @@ def process_and_enforce_rules(data, s3_urls):
     c_num = extract_number(carpet)
     s_num = extract_number(super_built)
 
-    # Real Estate Standards: Carpet = ~80% of Builtup, Super Builtup = ~125% of Builtup
+    # Calculation Standard: Carpet = 80% Builtup, Super Builtup = 125% Builtup
     if b_num is not None:
-        if c_num is None:
-            c_num = round(b_num * 0.8, 2)
-        if s_num is None:
-            s_num = round(b_num * 1.25, 2)
+        if c_num is None: c_num = round(b_num * 0.8, 2)
+        if s_num is None: s_num = round(b_num * 1.25, 2)
     elif c_num is not None:
-        if b_num is None:
-            b_num = round(c_num / 0.8, 2)
-        if s_num is None:
-            s_num = round(b_num * 1.25, 2)
+        if b_num is None: b_num = round(c_num / 0.8, 2)
+        if s_num is None: s_num = round(b_num * 1.25, 2)
     elif s_num is not None:
-        if b_num is None:
-            b_num = round(s_num / 1.25, 2)
-        if c_num is None:
-            c_num = round(b_num * 0.8, 2)
+        if b_num is None: b_num = round(s_num / 1.25, 2)
+        if c_num is None: c_num = round(b_num * 0.8, 2)
 
     final_builtup = str(int(b_num)) if b_num else "na"
     final_carpet = str(int(c_num)) if c_num else "na"
@@ -124,16 +116,17 @@ def process_and_enforce_rules(data, s3_urls):
     # --- RULE 3: Location / Sub-Locality / Full Address Logic ---
     locality_val = loc.get("locality", "na")
     sub_locality_val = loc.get("sub_locality", locality_val)
-    if sub_locality_val == "na" or not sub_locality_val:
+    if not sub_locality_val or sub_locality_val == "na":
         sub_locality_val = locality_val
 
     city_val = loc.get("city", "Kolkata")
     state_val = loc.get("state", "West Bengal")
+    
     full_addr = loc.get("full_address", "na")
-    if full_addr == "na" or not full_addr:
+    if not full_addr or full_addr == "na":
         full_addr = f"{locality_val}, {city_val}, {state_val}"
 
-    # --- RULE 4: Defaults Check ---
+    # --- RULE 4: Smart Defaults ---
     parking_val = spec.get("parking", "YES")
     if not parking_val or str(parking_val).lower() in ["na", "none", "null"]:
         parking_val = "YES"
@@ -245,27 +238,29 @@ def extract_json():
     s3_urls = json.loads(s3_urls_raw)
 
     try:
-        # DETAILED CUSTOM PROMPT FOR GEMINI AI
-        prompt_instruction = (
-            "You are a strict Real Estate Data Extraction Assistant. Read all uploaded property detail images carefully and extract EVERY piece of information. "
-            "Follow these EXTRACTION RULES strictly:\n"
-            "1. TITLE: Find the bold/black highlighted main property name/heading in the image and set it as 'title'. Do NOT miss it.\n"
-            "2. DESCRIPTION: Copy the ENTIRE continuous text line-by-line starting from above the property title down to the end of description.\n"
-            "3. AREA: Extract whichever area is visible (builtup_sqft, carpet_sqft, or super_builtup_sqft).\n"
-            "4. LOCATION & INTERNET SEARCH: Extract 'locality' and 'city'. Find a famous nearby 'landmark' and the accurate 6-digit 'pincode' for that locality using real web/locality knowledge.\n"
-            "5. NO MISSING FIELDS: Extract every specification like bhk, price, floor_no, total_floors, bathrooms, furnishing, facing, amenities, etc. DO NOT miss any detail.\n"
-            "Return strictly a raw valid JSON object without markdown fences (no ```json)."
-        )
+        prompt_text = """
+Extract ALL property details carefully from all the screenshots.
+Rules:
+1. 'title': Extract the bold main property heading name (e.g., 'Upohar The Condoville').
+2. 'description': Extract the full description text line-by-line starting from above the title to the bottom.
+3. 'contact': Extract 'owner_name' and 'phone' number carefully from advertiser contact details.
+4. 'pricing': Extract 'price_display' (e.g. ₹ 2.72 Crore) and numeric value.
+5. 'location': Extract 'locality' and 'city'. Use web knowledge to find the accurate 6-digit 'pincode' and nearby 'landmark' for this locality.
+6. 'specifications': Extract bhk_type, floor_no, total_floors, bathrooms, facing_direction, super_builtup_sqft, carpet_sqft, builtup_sqft, furnishing_status, amenities.
+7. Return strictly a raw JSON object without markdown code ticks (no ```json).
+"""
 
-        contents = [prompt_instruction]
+        contents = [prompt_text]
 
         for file in data_files:
             img = Image.open(file.stream)
             img = img.convert("RGB")
-            img.thumbnail((1024, 1024))
+            
+            # Optimization to prevent image payload buffer error
+            img.thumbnail((800, 800))
             
             byte_arr = io.BytesIO()
-            img.save(byte_arr, format='JPEG', quality=80)
+            img.save(byte_arr, format='JPEG', quality=85)
             image_bytes = byte_arr.getvalue()
 
             contents.append(
@@ -275,7 +270,6 @@ def extract_json():
                 )
             )
 
-        # Active Gemini Models
         models_to_try = [
             'gemini-3.6-flash',
             'gemini-3.1-flash-preview',
@@ -303,7 +297,6 @@ def extract_json():
         cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
         parsed_json = json.loads(cleaned_text)
 
-        # All Custom Business Rules & Formats Applied Here
         final_ordered_json = process_and_enforce_rules(parsed_json, s3_urls)
 
         json_output = json.dumps({"success": True, "data": final_ordered_json}, sort_keys=False)
@@ -331,4 +324,3 @@ def submit_to_db():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
-    
