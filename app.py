@@ -19,7 +19,7 @@ client_db = MongoClient(MONGO_URI)
 db = client_db[DB_NAME]
 collection = db[COLLECTION_NAME]
 
-# AWS S3 Configurations (Multiple Fallbacks for Environment Variable Keys)
+# AWS S3 Configurations
 S3_BUCKET = (
     os.environ.get("AWS_S3_BUCKET") 
     or os.environ.get("S3_BUCKET") 
@@ -125,7 +125,6 @@ def upload_s3():
         for file in files:
             filename = file.filename
             
-            # S3 Upload (ExtraArgs में ACL शामिल नहीं है)
             s3_client.upload_fileobj(
                 file,
                 S3_BUCKET,
@@ -171,11 +170,14 @@ def extract_json():
                 )
             )
 
-        # 🔄 Gemini Supported Models List (New SDK Format)
+        # 🔄 Gemini के सभी आधिकारिक और सक्रिय मॉडल्स की फ़ॉलबैक लिस्ट
         models_to_try = [
             'gemini-2.5-flash',
+            'gemini-2.5-pro',
             'gemini-2.0-flash',
-            'gemini-1.5-flash'
+            'gemini-2.0-flash-lite',
+            'gemini-1.5-flash',
+            'gemini-1.5-pro'
         ]
         
         response = None
@@ -225,4 +227,4 @@ def submit_to_db():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
-                
+    
