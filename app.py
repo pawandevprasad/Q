@@ -50,63 +50,85 @@ s3_client = boto3.client(
 ai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 # --- HELPER FUNCTION: Enforce Exact JSON Structure ---
+# --- HELPER FUNCTION: Enforce Exact JSON Structure (Crash-Proof) ---
 def enforce_exact_json_structure(data, s3_urls):
+    # अगर data खुद एक String है, तो उसे पहले JSON dict में parse करने की कोशिश करें
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except Exception:
+            data = {}
+    elif not isinstance(data, dict):
+        data = {}
+
+    def safe_get_dict(obj, key):
+        val = obj.get(key, {}) if isinstance(obj, dict) else {}
+        return val if isinstance(val, dict) else {}
+
+    cat = safe_get_dict(data, "category")
+    cnt = safe_get_dict(data, "contact")
+    td = safe_get_dict(data, "title_and_description")
+    loc = safe_get_dict(data, "location")
+    prc = safe_get_dict(data, "pricing")
+    spec = safe_get_dict(data, "specifications")
+    med = safe_get_dict(data, "media")
+
     return {
-        "user_id": data.get("user_id", "ADMIN"),
-        "posted_by_type": data.get("posted_by_type", "ADMIN"),
+        "user_id": data.get("user_id", "ADMIN") if isinstance(data, dict) else "ADMIN",
+        "posted_by_type": data.get("posted_by_type", "ADMIN") if isinstance(data, dict) else "ADMIN",
         "category": {
-            "purpose": data.get("category", {}).get("purpose", "BUY"),
-            "property_type": data.get("category", {}).get("property_type", "RESIDENTIAL"),
-            "sub_type": data.get("category", {}).get("sub_type", "FLAT_APARTMENT")
+            "purpose": cat.get("purpose", "BUY"),
+            "property_type": cat.get("property_type", "RESIDENTIAL"),
+            "sub_type": cat.get("sub_type", "FLAT_APARTMENT")
         },
         "contact": {
-            "owner_name": data.get("contact", {}).get("owner_name", "ADMIN"),
-            "phone": data.get("contact", {}).get("phone", "na"),
-            "owner_type": data.get("contact", {}).get("owner_type", "AGENT")
+            "owner_name": cnt.get("owner_name", "ADMIN"),
+            "phone": cnt.get("phone", "na"),
+            "owner_type": cnt.get("owner_type", "AGENT")
         },
         "title_and_description": {
-            "title": data.get("title_and_description", {}).get("title", "na"),
-            "description": data.get("title_and_description", {}).get("description", "na")
+            "title": td.get("title", "na"),
+            "description": td.get("description", "na")
         },
         "location": {
-            "city": data.get("location", {}).get("city", "Kolkata"),
-            "locality": data.get("location", {}).get("locality", "na"),
-            "sub_locality": data.get("location", {}).get("sub_locality", "na"),
-            "landmark": data.get("location", {}).get("landmark", "na"),
-            "pincode": data.get("location", {}).get("pincode", "na"),
-            "state": data.get("location", {}).get("state", "West Bengal"),
-            "full_address": data.get("location", {}).get("full_address", "na")
+            "city": loc.get("city", "Kolkata"),
+            "locality": loc.get("locality", "na"),
+            "sub_locality": loc.get("sub_locality", "na"),
+            "landmark": loc.get("landmark", "na"),
+            "pincode": loc.get("pincode", "na"),
+            "state": loc.get("state", "West Bengal"),
+            "full_address": loc.get("full_address", "na")
         },
         "pricing": {
-            "price_display": data.get("pricing", {}).get("price_display", "na"),
-            "price_numeric": data.get("pricing", {}).get("price_numeric", "na"),
-            "is_negotiable": data.get("pricing", {}).get("is_negotiable", True)
+            "price_display": prc.get("price_display", "na"),
+            "price_numeric": prc.get("price_numeric", "na"),
+            "is_negotiable": prc.get("is_negotiable", True)
         },
         "specifications": {
-            "bhk_type": data.get("specifications", {}).get("bhk_type", "na"),
-            "bhk_numeric": data.get("specifications", {}).get("bhk_numeric", "na"),
-            "builtup_sqft": data.get("specifications", {}).get("builtup_sqft", "na"),
-            "carpet_sqft": data.get("specifications", {}).get("carpet_sqft", "na"),
-            "super_builtup_sqft": data.get("specifications", {}).get("super_builtup_sqft", "na"),
-            "floor_no": data.get("specifications", {}).get("floor_no", "na"),
-            "total_floors": data.get("specifications", {}).get("total_floors", "na"),
-            "bathrooms": data.get("specifications", {}).get("bathrooms", "na"),
-            "balconies": data.get("specifications", {}).get("balconies", "na"),
-            "furnishing_status": data.get("specifications", {}).get("furnishing_status", "na"),
-            "construction_status": data.get("specifications", {}).get("construction_status", "na"),
-            "facing_direction": data.get("specifications", {}).get("facing_direction", "NORTH WEST"),
-            "property_age": data.get("specifications", {}).get("property_age", "na"),
-            "parking": data.get("specifications", {}).get("parking", "YES"),
-            "ownership_type": data.get("specifications", {}).get("ownership_type", "FREEHOLD")
+            "bhk_type": spec.get("bhk_type", "na"),
+            "bhk_numeric": spec.get("bhk_numeric", "na"),
+            "builtup_sqft": spec.get("builtup_sqft", "na"),
+            "carpet_sqft": spec.get("carpet_sqft", "na"),
+            "super_builtup_sqft": spec.get("super_builtup_sqft", "na"),
+            "floor_no": spec.get("floor_no", "na"),
+            "total_floors": spec.get("total_floors", "na"),
+            "bathrooms": spec.get("bathrooms", "na"),
+            "balconies": spec.get("balconies", "na"),
+            "furnishing_status": spec.get("furnishing_status", "na"),
+            "construction_status": spec.get("construction_status", "na"),
+            "facing_direction": spec.get("facing_direction", "NORTH WEST"),
+            "property_age": spec.get("property_age", "na"),
+            "parking": spec.get("parking", "YES"),
+            "ownership_type": spec.get("ownership_type", "FREEHOLD")
         },
-        "amenities": data.get("amenities", []),
+        "amenities": data.get("amenities", []) if isinstance(data, dict) and isinstance(data.get("amenities"), list) else [],
         "media": {
-            "images": data.get("media", {}).get("images", s3_urls),
-            "ai_short_video_url": data.get("media", {}).get("ai_short_video_url", "na")
+            "images": med.get("images", s3_urls) if isinstance(med.get("images"), list) else s3_urls,
+            "ai_short_video_url": med.get("ai_short_video_url", "na")
         },
-        "created_at": data.get("created_at", "few years")
+        "created_at": data.get("created_at", "few years") if isinstance(data, dict) else "few years"
     }
-
+    
 # --- ROUTES ---
 
 @app.route('/')
