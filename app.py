@@ -173,11 +173,7 @@ def extract_json():
         # 🔄 Gemini के सभी आधिकारिक और सक्रिय मॉडल्स की फ़ॉलबैक लिस्ट
         models_to_try = [
             'gemini-2.5-flash',
-            'gemini-2.5-pro',
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-lite',
-            'gemini-1.5-flash',
-            'gemini-1.5-pro'
+            'gemini-2.5-pro'
         ]
         
         response = None
