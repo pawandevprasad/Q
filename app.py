@@ -1,6 +1,6 @@
 import os
 import json
-import re
+import time
 from flask import Flask, render_template, request, jsonify
 import boto3
 from pymongo import MongoClient
@@ -51,7 +51,7 @@ s3_client = boto3.client(
 ai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
-# --- HELPER FUNCTION: Enforce Rules & Anti-NA Fallbacks ---
+# --- HELPER FUNCTION: Enforce Rules & Logic ---
 def process_and_enforce_rules(data, s3_urls):
     if isinstance(data, str):
         try:
@@ -144,7 +144,7 @@ def process_and_enforce_rules(data, s3_urls):
     else:
         full_addr = base_addr
 
-    # --- RULE 5: BHK Numeric ---
+    # --- RULE 5: BHK Numeric Calculation ---
     raw_bhk = spec.get("bhk_type", "na")
     bhk_num_val = spec.get("bhk_numeric", "na")
     if (bhk_num_val == "na" or not bhk_num_val) and raw_bhk != "na":
@@ -155,22 +155,18 @@ def process_and_enforce_rules(data, s3_urls):
     # --- RULE 6: Phone Number Fallback ---
     raw_phone = str(cnt.get("phone", "na")).strip()
     if not raw_phone or raw_phone.lower() in ["na", "none", "null"]:
-        raw_phone = "9073662554"  # Default / Extracted fallback
+        raw_phone = "9073662554"
 
-    # --- RULE 7: Title & Description Anti-NA Auto Generator ---
+    # --- RULE 7: Title & Description Anti-NA Fallbacks ---
     raw_title = str(td.get("title", "na")).strip()
     raw_desc = str(td.get("description", "na")).strip()
 
-    bhk_type_clean = raw_bhk if raw_bhk != "na" else "4 BHK"
-    sub_type_clean = cat.get("sub_type", "FLAT_APARTMENT").replace("_", " ").title()
     loc_clean = locality_val if locality_val != "na" else "Garia"
     city_clean = city_val if city_val != "na" else "Kolkata"
 
-    # Title fallback
     if not raw_title or raw_title.lower() in ["na", "none", "null"]:
-        raw_title = f"Upohar The Condoville"
+        raw_title = "Upohar The Condoville"
 
-    # Description fallback
     if not raw_desc or raw_desc.lower() in ["na", "none", "null"]:
         raw_desc = f"Flat for Resale in Upohar The Condoville {loc_clean}, {city_clean}"
 
@@ -236,7 +232,7 @@ def process_and_enforce_rules(data, s3_urls):
             "parking": parking_val,
             "ownership_type": spec.get("ownership_type", "FREEHOLD")
         },
-        "amenities": data.get("amenities", []) if isinstance(data.get("amenities"), list) else [],
+        "amenities": data.get("amenities", []) if isinstance(data, dict) and isinstance(data.get("amenities"), list) else [],
         "media": {
             "images": med.get("images", s3_urls) if isinstance(med.get("images"), list) else s3_urls,
             "ai_short_video_url": med.get("ai_short_video_url", "na")
@@ -289,21 +285,20 @@ def extract_json():
         prompt_text = """
 Read all uploaded property screenshots with extreme OCR attention and extract details strictly into JSON:
 
-CRITICAL EXTRACTION FIELDS:
-1. 'contact':
-   - 'owner_name': Look for advertiser name (e.g., 'Mr Pradeep').
-   - 'phone': Search for 10-digit mobile number or numbers starting with 91- (e.g. '91-9073662554' or '9073662554'). DO NOT MISS THIS.
-2. 'title': Extract ONLY the main dark/bold property heading text (e.g. 'Upohar The Condoville').
-3. 'description': Extract text line above/around title ending at city name (e.g. 'Flat for Resale in Upohar The Condoville Garia, Kolkata'). STOP at Kolkata.
-4. 'pricing': Extract 'price_display' (e.g. ₹ 2.72 Crore) and 'price_numeric' (27200000).
-5. 'location': Extract 'locality' and 'city'. Search web knowledge for the correct 6-digit 'pincode' and nearest famous 'landmark'.
-6. 'specifications':
+CRITICAL EXTRACTION RULES:
+1. 'title': Extract ONLY the main dark/bold property heading text (e.g. 'Upohar The Condoville').
+2. 'description': Extract text line above/around title ending at city name (e.g. 'Flat for Resale in Upohar The Condoville Garia, Kolkata'). STOP immediately after Kolkata.
+3. 'contact': Extract 'owner_name' (e.g. Mr Pradeep) and 'phone' number (e.g. 91-9073662554 or 9073662554).
+4. 'pricing': Extract 'price_display' (e.g. ₹ 2.72 Crore) and 'price_numeric' (e.g. 27200000).
+5. 'location': Extract 'locality' and 'city'. Search web knowledge for the 6-digit 'pincode' and nearest famous 'landmark'.
+6. 'amenities': Look closely at green checkmarks and bullet features across all screenshots (e.g. 'Overlooking Park', '1 Covered Parking', 'Vaastu Compliant', 'Separate entry for servant room', 'Partial Power Backup') and extract them into a list of strings.
+7. 'specifications':
    - 'bhk_type': Extract BHK text (e.g. '4 BHK').
    - 'bhk_numeric': Extract numeric value of BHK (e.g. '4').
    - 'construction_status': If 'Ready To Move', set 'READY_TO_MOVE'. If 'Under Construction', set 'UNDER_CONSTRUCTION'.
    - 'property_age': Extract age text (e.g., '5-10 Year Old Property').
    - Extract floor_no, total_floors, bathrooms, facing_direction, super_builtup_sqft, carpet_sqft, builtup_sqft, furnishing_status.
-7. Return strictly raw JSON without markdown fences (no ```json).
+8. Return strictly raw JSON without markdown code fences (no ```json).
 """
 
         contents = [prompt_text]
@@ -324,29 +319,29 @@ CRITICAL EXTRACTION FIELDS:
                 )
             )
 
-                # 🔄 Active Supported Gemini Model
-        models_to_try = [
-            'gemini-3.6-flash'
-        ]
-        
-        
+        # 🔄 Active Supported Gemini Model with Auto Retry Logic
+        models_to_try = ['gemini-3.6-flash']
         response = None
         last_error = None
 
         for model_name in models_to_try:
-            try:
-                response = ai_client.models.generate_content(
-                    model=model_name,
-                    contents=contents
-                )
-                if response and response.text:
-                    break
-            except Exception as err:
-                last_error = err
-                continue
+            for attempt in range(3):  # Retry 3 times for 503 Server Busy errors
+                try:
+                    response = ai_client.models.generate_content(
+                        model=model_name,
+                        contents=contents
+                    )
+                    if response and response.text:
+                        break
+                except Exception as err:
+                    last_error = err
+                    time.sleep(2)
+                    continue
+            if response and response.text:
+                break
 
         if not response or not response.text:
-            raise Exception(f"All Gemini models failed. Last error: {str(last_error)}")
+            raise Exception(f"Gemini API Error. Details: {str(last_error)}")
         
         cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
         parsed_json = json.loads(cleaned_text)
@@ -378,4 +373,4 @@ def submit_to_db():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
-                           
+    
