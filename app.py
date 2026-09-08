@@ -11,7 +11,7 @@ import io
 app = Flask(__name__)
 
 # --- CONFIGURATIONS ---
-MONGO_URI = os.environ.get("MONGO_URI", "your_mongodb_connection_string_here")
+MONGO_URI = os.environ.get("MONGO_URI")
 DB_NAME = "property_database"
 COLLECTION_NAME = "properties"
 
@@ -20,12 +20,17 @@ db = client_db[DB_NAME]
 collection = db[COLLECTION_NAME]
 
 # AWS S3 Configuration
-S3_BUCKET = os.environ.get("S3_BUCKET", "your_s3_bucket_name")
+# Render से पर्यावरण वेरिएबल (Environment Variables) पढ़ें
+S3_BUCKET = os.environ.get("AWS_S3_BUCKET") or os.environ.get("S3_BUCKET") or os.environ.get("AWS_S3_BUCKET_NAME")
+AWS_ACCESS_KEY = os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("AWS_ACCESS_KEY")
+AWS_SECRET_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY") or os.environ.get("AWS_SECRET_KEY")
+AWS_REGION = os.environ.get("AWS_REGION", "ap-south-1")
+
 s3_client = boto3.client(
     's3',
-    aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "your_aws_access_key"),
-    aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "your_aws_secret_key"),
-    region_name=os.environ.get("AWS_REGION", "ap-south-1")
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    region_name=AWS_REGION
 )
 
 # Google GenAI Configuration
@@ -106,13 +111,16 @@ def upload_s3():
     try:
         for file in files:
             filename = file.filename
+            
+            # S3 में फ़ाइल अपलोड
             s3_client.upload_fileobj(
                 file,
                 S3_BUCKET,
                 filename,
                 ExtraArgs={'ContentType': file.content_type}
             )
-            file_url = f"https://{S3_BUCKET}.s3.amazonaws.com/{filename}"
+            
+            file_url = f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{filename}"
             uploaded_urls.append(file_url)
         
         return jsonify({"success": True, "urls": uploaded_urls}), 200
@@ -136,7 +144,6 @@ def extract_json():
         ]
 
         for file in data_files:
-            # 🟢 RAM बचाने के लिए इमेज को रीसाइज और कॉम्प्रेस करना
             img = Image.open(file.stream)
             img = img.convert("RGB")
             img.thumbnail((1024, 1024))
@@ -152,17 +159,10 @@ def extract_json():
                 )
             )
 
-        # 🔄 Gemini Models Fallback List
         models_to_try = [
-            'gemini-3.8-flash',
-            'gemini-3.7-flash',
-            'gemini-3.6-flash',
-            'gemini-3.5-flash',
             'gemini-2.5-flash',
             'gemini-2.0-flash',
-            'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-1.5-flash-latest'
+            'gemini-1.5-flash'
         ]
         
         response = None
@@ -212,3 +212,4 @@ def submit_to_db():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+            
