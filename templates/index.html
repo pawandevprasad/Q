@@ -490,7 +490,8 @@
       window.addEventListener('mouseup', stopWMDrag);
       window.addEventListener('touchend', stopWMDrag);
     }
-        function updateWatermarkPreviews() {
+
+    function updateWatermarkPreviews() {
       requestAnimationFrame(() => {
         cropperInstances.forEach((_, index) => renderPreview(index));
       });
@@ -628,6 +629,17 @@
       }
     });
 
+      copyAllUrlsBtn.addEventListener('click', () => {
+      if (uploadedS3Urls.length === 0) return;
+      navigator.clipboard.writeText(uploadedS3Urls.join('\n'));
+      copyAllUrlsBtn.innerText = 'All URLs Copied!';
+      copyAllUrlsBtn.style.background = '#10b981';
+      setTimeout(() => {
+        copyAllUrlsBtn.innerText = 'Copy All URLs';
+        copyAllUrlsBtn.style.background = '#8b5cf6';
+      }, 2000);
+    });
+
     extractJsonBtn.addEventListener('click', async () => {
       const dataFiles = dataImagesInput.files;
       if (dataFiles.length === 0) return alert('Please select property detail photos for AI extraction!');
@@ -648,7 +660,7 @@
 
         if (result.success) {
           aiStatusMsg.innerText = 'JSON Extracted Successfully!';
-          jsonDataInput.value = JSON.stringify(result.result || result.data, null, 2);
+          jsonDataInput.value = JSON.stringify(result.data, null, 2);
           jsonResultSection.style.display = 'block';
           jsonResultSection.scrollIntoView({ behavior: 'smooth' });
         } else {
@@ -701,3 +713,4 @@
   </script>
 </body>
 </html>
+
