@@ -169,11 +169,11 @@ def extract_json():
                     mime_type='image/jpeg'
                 )
             )
-
-                
-                    # 🔄 Active Gemini Model
+       
+        # 🔄 Active Gemini Model for google-genai SDK
         models_to_try = [
-            'gemini-2.5-flash'
+            'gemini-3.6-flash',
+            'gemini-3.1-pro-preview'
         ]
         
         
