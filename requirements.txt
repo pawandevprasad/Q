@@ -1,0 +1,9 @@
+Flask
+flask-cors
+boto3
+botocore
+pymongo
+Pillow
+requests
+gunicorn
+google-genai
