@@ -49,10 +49,8 @@ s3_client = boto3.client(
 # Google GenAI Configuration
 ai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# --- HELPER FUNCTION: Enforce Exact JSON Structure ---
-# --- HELPER FUNCTION: Enforce Exact JSON Structure (Crash-Proof) ---
+# --- HELPER FUNCTION: Enforce Exact JSON Structure (Line by Line Exact Order) ---
 def enforce_exact_json_structure(data, s3_urls):
-    # अगर data खुद एक String है, तो उसे पहले JSON dict में parse करने की कोशिश करें
     if isinstance(data, str):
         try:
             data = json.loads(data)
@@ -128,7 +126,7 @@ def enforce_exact_json_structure(data, s3_urls):
         },
         "created_at": data.get("created_at", "few years") if isinstance(data, dict) else "few years"
     }
-    
+
 # --- ROUTES ---
 
 @app.route('/')
@@ -172,8 +170,8 @@ def extract_json():
     try:
         contents = [
             "Extract property details from these images and return strictly a valid JSON object matching "
-            "the standard property schema (user_id, category, contact, title_and_description, location, "
-            "pricing, specifications, amenities, media, created_at). Do not add any extra text, markdown ticks only if necessary."
+            "this schema order: user_id, posted_by_type, category, contact, title_and_description, location, "
+            "pricing, specifications, amenities, media, created_at. Do not add markdown backticks. Return raw JSON text."
         ]
 
         for file in data_files:
@@ -191,15 +189,13 @@ def extract_json():
                     mime_type='image/jpeg'
                 )
             )
-       
-        # 🔄 Active Gemini Model for google-genai SDK
-                # 🔄 Free-Tier Optimized Gemini Flash Models
+
+        # 🔄 Free-Tier Optimized Gemini Flash Models
         models_to_try = [
             'gemini-3.6-flash',
             'gemini-3.1-flash-preview',
             'gemini-2.5-flash'
         ]
-        
         
         response = None
         last_error = None
@@ -224,7 +220,9 @@ def extract_json():
 
         final_ordered_json = enforce_exact_json_structure(parsed_json, s3_urls)
 
-        return jsonify({"success": True, "data": final_ordered_json}), 200
+        # sort_keys=False ensure karta hai ki JSON key ka sequential order kharab na ho
+        json_output = json.dumps({"success": True, "data": final_ordered_json}, sort_keys=False)
+        return app.response_class(response=json_output, status=200, mimetype='application/json')
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -248,4 +246,4 @@ def submit_to_db():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
-    
+        
