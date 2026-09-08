@@ -1,6 +1,5 @@
 import os
 import json
-import base64
 from flask import Flask, render_template, request, jsonify
 import boto3
 from pymongo import MongoClient
@@ -51,7 +50,7 @@ s3_client = boto3.client(
 ai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
-# --- HELPER FUNCTION: Enforce All Custom Business Rules & Fallbacks ---
+# --- HELPER FUNCTION: Enforce All Custom Business Rules ---
 def process_and_enforce_rules(data, s3_urls):
     if isinstance(data, str):
         try:
@@ -98,7 +97,7 @@ def process_and_enforce_rules(data, s3_urls):
     c_num = extract_number(carpet)
     s_num = extract_number(super_built)
 
-    # Calculation Standard: Carpet = 80% Builtup, Super Builtup = 125% Builtup
+    # Carpet = 80% Builtup, Super Builtup = 125% Builtup
     if b_num is not None:
         if c_num is None: c_num = round(b_num * 0.8, 2)
         if s_num is None: s_num = round(b_num * 1.25, 2)
@@ -113,20 +112,54 @@ def process_and_enforce_rules(data, s3_urls):
     final_carpet = str(int(c_num)) if c_num else "na"
     final_super = str(int(s_num)) if s_num else "na"
 
-    # --- RULE 3: Location / Sub-Locality / Full Address Logic ---
+    # --- RULE 3: Location / Sub-locality / Full Address (Locality to Pincode) ---
     locality_val = loc.get("locality", "na")
-    sub_locality_val = loc.get("sub_locality", locality_val)
-    if not sub_locality_val or sub_locality_val == "na":
-        sub_locality_val = locality_val
-
     city_val = loc.get("city", "Kolkata")
     state_val = loc.get("state", "West Bengal")
-    
-    full_addr = loc.get("full_address", "na")
-    if not full_addr or full_addr == "na":
-        full_addr = f"{locality_val}, {city_val}, {state_val}"
+    pincode_val = str(loc.get("pincode", "na")).strip()
+    landmark_val = loc.get("landmark", "na")
 
-    # --- RULE 4: Smart Defaults ---
+    # Locality aur Sub-locality ek hi aayega
+    sub_locality_val = locality_val
+
+    # Full address: Locality se lekar Pincode tak poora aayega
+    addr_parts = []
+    if locality_val != "na": addr_parts.append(locality_val)
+    if city_val != "na": addr_parts.append(city_val)
+    if state_val != "na": addr_parts.append(state_val)
+    
+    base_addr = ", ".join(addr_parts) if addr_parts else "na"
+    if pincode_val != "na" and pincode_val:
+        full_addr = f"{base_addr} - {pincode_val}"
+    else:
+        full_addr = base_addr
+
+    # --- RULE 4: Title & Description Smart Generator Fallback ---
+    raw_title = td.get("title", "na")
+    raw_desc = td.get("description", "na")
+
+    bhk_str = spec.get("bhk_type", "na")
+    sub_type_str = cat.get("sub_type", "FLAT_APARTMENT").replace("_", " ").title()
+    price_str = prc.get("price_display", "na")
+
+    if not raw_title or str(raw_title).lower() in ["na", "none", "null"]:
+        if bhk_str != "na" and locality_val != "na":
+            raw_title = f"{bhk_str} {sub_type_str} for Sale in {locality_val}, {city_val}"
+        elif locality_val != "na":
+            raw_title = f"{sub_type_str} for Sale in {locality_val}"
+        else:
+            raw_title = "Residential Property for Sale"
+
+    if not raw_desc or str(raw_desc).lower() in ["na", "none", "null"]:
+        desc_parts = []
+        if bhk_str != "na": desc_parts.append(f"{bhk_str} {sub_type_str}")
+        if locality_val != "na": desc_parts.append(f"located in {locality_val}, {city_val}")
+        if price_str != "na": desc_parts.append(f"priced at {price_str}")
+        if final_super != "na": desc_parts.append(f"with Super Built-up Area of {final_super} sqft")
+        desc_parts.append("featuring modern amenities and excellent connectivity.")
+        raw_desc = " ".join(desc_parts)
+
+    # --- RULE 5: Smart Defaults ---
     parking_val = spec.get("parking", "YES")
     if not parking_val or str(parking_val).lower() in ["na", "none", "null"]:
         parking_val = "YES"
@@ -154,15 +187,15 @@ def process_and_enforce_rules(data, s3_urls):
             "owner_type": cnt.get("owner_type", "AGENT")
         },
         "title_and_description": {
-            "title": td.get("title", "na"),
-            "description": td.get("description", "na")
+            "title": raw_title,
+            "description": raw_desc
         },
         "location": {
             "city": city_val,
             "locality": locality_val,
             "sub_locality": sub_locality_val,
-            "landmark": loc.get("landmark", "na"),
-            "pincode": loc.get("pincode", "na"),
+            "landmark": landmark_val,
+            "pincode": pincode_val,
             "state": state_val,
             "full_address": full_addr
         },
@@ -239,15 +272,15 @@ def extract_json():
 
     try:
         prompt_text = """
-Extract ALL property details carefully from all the screenshots.
+Extract ALL property details from all uploaded screenshots accurately.
 Rules:
-1. 'title': Extract the bold main property heading name (e.g., 'Upohar The Condoville').
-2. 'description': Extract the full description text line-by-line starting from above the title to the bottom.
-3. 'contact': Extract 'owner_name' and 'phone' number carefully from advertiser contact details.
-4. 'pricing': Extract 'price_display' (e.g. ₹ 2.72 Crore) and numeric value.
-5. 'location': Extract 'locality' and 'city'. Use web knowledge to find the accurate 6-digit 'pincode' and nearby 'landmark' for this locality.
-6. 'specifications': Extract bhk_type, floor_no, total_floors, bathrooms, facing_direction, super_builtup_sqft, carpet_sqft, builtup_sqft, furnishing_status, amenities.
-7. Return strictly a raw JSON object without markdown code ticks (no ```json).
+1. 'title': Extract the main bold property heading (e.g. 'Upohar The Condoville').
+2. 'description': Extract all descriptive lines from top to bottom across screenshots.
+3. 'contact': Extract owner_name (e.g. Mr Pradeep) and phone number.
+4. 'pricing': Extract price_display (e.g. ₹ 2.72 Crore) and numeric value.
+5. 'location': Extract 'locality' and 'city'. Use internal knowledge to find the correct 6-digit 'pincode' and nearest famous 'landmark' for this locality.
+6. 'specifications': Extract bhk_type, floor_no, total_floors, bathrooms, facing_direction, super_builtup_sqft, carpet_sqft, builtup_sqft, furnishing_status.
+7. Return strictly a raw JSON object without markdown fences (no ```json).
 """
 
         contents = [prompt_text]
@@ -255,8 +288,6 @@ Rules:
         for file in data_files:
             img = Image.open(file.stream)
             img = img.convert("RGB")
-            
-            # Optimization to prevent image payload buffer error
             img.thumbnail((800, 800))
             
             byte_arr = io.BytesIO()
@@ -324,3 +355,4 @@ def submit_to_db():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+    
