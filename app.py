@@ -49,8 +49,9 @@ s3_client = boto3.client(
 # Google GenAI Configuration
 ai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# --- HELPER FUNCTION: Enforce Exact JSON Structure (Line by Line Exact Order) ---
-def enforce_exact_json_structure(data, s3_urls):
+
+# --- HELPER FUNCTION: Enforce Exact Rules & Structured Fallbacks ---
+def process_and_enforce_rules(data, s3_urls):
     if isinstance(data, str):
         try:
             data = json.loads(data)
@@ -71,9 +72,84 @@ def enforce_exact_json_structure(data, s3_urls):
     spec = safe_get_dict(data, "specifications")
     med = safe_get_dict(data, "media")
 
+    # --- RULE 1: Bathrooms & Balconies Logic ---
+    raw_bathrooms = spec.get("bathrooms", "1")
+    try:
+        bath_num = int(''.join(filter(str.isdigit, str(raw_bathrooms))))
+    except ValueError:
+        bath_num = 1
+
+    if bath_num >= 4:
+        balconies_val = "2"
+    else:
+        balconies_val = "1"
+
+    # --- RULE 2: Built-up / Carpet / Super Built-up Area Auto Calculation ---
+    builtup = str(spec.get("builtup_sqft", "na")).strip()
+    carpet = str(spec.get("carpet_sqft", "na")).strip()
+    super_built = str(spec.get("super_builtup_sqft", "na")).strip()
+
+    def extract_number(val):
+        try:
+            nums = ''.join(c for c in val if c.isdigit() or c == '.')
+            return float(nums) if nums else None
+        except ValueError:
+            return None
+
+    b_num = extract_number(builtup)
+    c_num = extract_number(carpet)
+    s_num = extract_number(super_built)
+
+    # Real Estate Standards: Carpet = ~80% of Builtup, Super Builtup = ~125% of Builtup
+    if b_num is not None:
+        if c_num is None:
+            c_num = round(b_num * 0.8, 2)
+        if s_num is None:
+            s_num = round(b_num * 1.25, 2)
+    elif c_num is not None:
+        if b_num is None:
+            b_num = round(c_num / 0.8, 2)
+        if s_num is None:
+            s_num = round(b_num * 1.25, 2)
+    elif s_num is not None:
+        if b_num is None:
+            b_num = round(s_num / 1.25, 2)
+        if c_num is None:
+            c_num = round(b_num * 0.8, 2)
+
+    final_builtup = str(int(b_num)) if b_num else "na"
+    final_carpet = str(int(c_num)) if c_num else "na"
+    final_super = str(int(s_num)) if s_num else "na"
+
+    # --- RULE 3: Location / Sub-Locality / Full Address Logic ---
+    locality_val = loc.get("locality", "na")
+    sub_locality_val = loc.get("sub_locality", locality_val)
+    if sub_locality_val == "na" or not sub_locality_val:
+        sub_locality_val = locality_val
+
+    city_val = loc.get("city", "Kolkata")
+    state_val = loc.get("state", "West Bengal")
+    full_addr = loc.get("full_address", "na")
+    if full_addr == "na" or not full_addr:
+        full_addr = f"{locality_val}, {city_val}, {state_val}"
+
+    # --- RULE 4: Defaults Check ---
+    parking_val = spec.get("parking", "YES")
+    if not parking_val or str(parking_val).lower() in ["na", "none", "null"]:
+        parking_val = "YES"
+
+    facing_val = spec.get("facing_direction", "NORTH EAST")
+    if not facing_val or str(facing_val).lower() in ["na", "none", "null"]:
+        facing_val = "NORTH EAST"
+
+    created_at_val = data.get("created_at", "few years")
+    if not created_at_val or str(created_at_val).lower() in ["na", "none", "null"]:
+        created_at_val = "few years"
+
+    # --- EXACT JSON OUTPUT ORDER ---
     return {
-        "user_id": data.get("user_id", "ADMIN") if isinstance(data, dict) else "ADMIN",
-        "posted_by_type": data.get("posted_by_type", "ADMIN") if isinstance(data, dict) else "ADMIN",
+        "user_id": data.get("user_id", "ADMIN"),
+        "posted_by_type": data.get("posted_by_type", "ADMIN"),
         "category": {
             "purpose": cat.get("purpose", "BUY"),
             "property_type": cat.get("property_type", "RESIDENTIAL"),
@@ -89,13 +165,13 @@ def enforce_exact_json_structure(data, s3_urls):
             "description": td.get("description", "na")
         },
         "location": {
-            "city": loc.get("city", "Kolkata"),
-            "locality": loc.get("locality", "na"),
-            "sub_locality": loc.get("sub_locality", "na"),
+            "city": city_val,
+            "locality": locality_val,
+            "sub_locality": sub_locality_val,
             "landmark": loc.get("landmark", "na"),
             "pincode": loc.get("pincode", "na"),
-            "state": loc.get("state", "West Bengal"),
-            "full_address": loc.get("full_address", "na")
+            "state": state_val,
+            "full_address": full_addr
         },
         "pricing": {
             "price_display": prc.get("price_display", "na"),
@@ -105,27 +181,28 @@ def enforce_exact_json_structure(data, s3_urls):
         "specifications": {
             "bhk_type": spec.get("bhk_type", "na"),
             "bhk_numeric": spec.get("bhk_numeric", "na"),
-            "builtup_sqft": spec.get("builtup_sqft", "na"),
-            "carpet_sqft": spec.get("carpet_sqft", "na"),
-            "super_builtup_sqft": spec.get("super_builtup_sqft", "na"),
+            "builtup_sqft": final_builtup,
+            "carpet_sqft": final_carpet,
+            "super_builtup_sqft": final_super,
             "floor_no": spec.get("floor_no", "na"),
             "total_floors": spec.get("total_floors", "na"),
-            "bathrooms": spec.get("bathrooms", "na"),
-            "balconies": spec.get("balconies", "na"),
+            "bathrooms": str(bath_num),
+            "balconies": balconies_val,
             "furnishing_status": spec.get("furnishing_status", "na"),
             "construction_status": spec.get("construction_status", "na"),
-            "facing_direction": spec.get("facing_direction", "NORTH WEST"),
+            "facing_direction": facing_val,
             "property_age": spec.get("property_age", "na"),
-            "parking": spec.get("parking", "YES"),
+            "parking": parking_val,
             "ownership_type": spec.get("ownership_type", "FREEHOLD")
         },
-        "amenities": data.get("amenities", []) if isinstance(data, dict) and isinstance(data.get("amenities"), list) else [],
+        "amenities": data.get("amenities", []) if isinstance(data.get("amenities"), list) else [],
         "media": {
             "images": med.get("images", s3_urls) if isinstance(med.get("images"), list) else s3_urls,
             "ai_short_video_url": med.get("ai_short_video_url", "na")
         },
-        "created_at": data.get("created_at", "few years") if isinstance(data, dict) else "few years"
+        "created_at": created_at_val
     }
+
 
 # --- ROUTES ---
 
@@ -168,11 +245,19 @@ def extract_json():
     s3_urls = json.loads(s3_urls_raw)
 
     try:
-        contents = [
-            "Extract property details from these images and return strictly a valid JSON object matching "
-            "this schema order: user_id, posted_by_type, category, contact, title_and_description, location, "
-            "pricing, specifications, amenities, media, created_at. Do not add markdown backticks. Return raw JSON text."
-        ]
+        # DETAILED CUSTOM PROMPT FOR GEMINI AI
+        prompt_instruction = (
+            "You are a strict Real Estate Data Extraction Assistant. Read all uploaded property detail images carefully and extract EVERY piece of information. "
+            "Follow these EXTRACTION RULES strictly:\n"
+            "1. TITLE: Find the bold/black highlighted main property name/heading in the image and set it as 'title'. Do NOT miss it.\n"
+            "2. DESCRIPTION: Copy the ENTIRE continuous text line-by-line starting from above the property title down to the end of description.\n"
+            "3. AREA: Extract whichever area is visible (builtup_sqft, carpet_sqft, or super_builtup_sqft).\n"
+            "4. LOCATION & INTERNET SEARCH: Extract 'locality' and 'city'. Find a famous nearby 'landmark' and the accurate 6-digit 'pincode' for that locality using real web/locality knowledge.\n"
+            "5. NO MISSING FIELDS: Extract every specification like bhk, price, floor_no, total_floors, bathrooms, furnishing, facing, amenities, etc. DO NOT miss any detail.\n"
+            "Return strictly a raw valid JSON object without markdown fences (no ```json)."
+        )
+
+        contents = [prompt_instruction]
 
         for file in data_files:
             img = Image.open(file.stream)
@@ -190,7 +275,7 @@ def extract_json():
                 )
             )
 
-        # 🔄 Free-Tier Optimized Gemini Flash Models
+        # Active Gemini Models
         models_to_try = [
             'gemini-3.6-flash',
             'gemini-3.1-flash-preview',
@@ -218,9 +303,9 @@ def extract_json():
         cleaned_text = response.text.replace("```json", "").replace("```", "").strip()
         parsed_json = json.loads(cleaned_text)
 
-        final_ordered_json = enforce_exact_json_structure(parsed_json, s3_urls)
+        # All Custom Business Rules & Formats Applied Here
+        final_ordered_json = process_and_enforce_rules(parsed_json, s3_urls)
 
-        # sort_keys=False ensure karta hai ki JSON key ka sequential order kharab na ho
         json_output = json.dumps({"success": True, "data": final_ordered_json}, sort_keys=False)
         return app.response_class(response=json_output, status=200, mimetype='application/json')
 
@@ -246,4 +331,4 @@ def submit_to_db():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
-        
+    
