@@ -324,11 +324,11 @@ CRITICAL EXTRACTION FIELDS:
                 )
             )
 
+                # 🔄 Active Supported Gemini Model
         models_to_try = [
-            'gemini-3.6-flash',
-            'gemini-3.1-flash-preview',
-            'gemini-2.5-flash'
+            'gemini-3.6-flash'
         ]
+        
         
         response = None
         last_error = None
