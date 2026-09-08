@@ -193,9 +193,11 @@ def extract_json():
             )
        
         # 🔄 Active Gemini Model for google-genai SDK
+                # 🔄 Free-Tier Optimized Gemini Flash Models
         models_to_try = [
             'gemini-3.6-flash',
-            'gemini-3.1-pro-preview'
+            'gemini-3.1-flash-preview',
+            'gemini-2.5-flash'
         ]
         
         
