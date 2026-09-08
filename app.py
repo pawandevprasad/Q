@@ -170,12 +170,10 @@ def extract_json():
                 )
             )
 
-                # 🔄 Latest Google GenAI Models (Updated as per API Recommendation)
+                
+                    # 🔄 Active Gemini Model
         models_to_try = [
-            'gemini-3.1-pro-preview',
-            'gemini-3.1-flash-preview',
-            'gemini-2.0-flash',
-            'gemini-1.5-flash'
+            'gemini-2.5-flash'
         ]
         
         
