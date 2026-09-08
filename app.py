@@ -170,11 +170,14 @@ def extract_json():
                 )
             )
 
-        # 🔄 Gemini के सभी आधिकारिक और सक्रिय मॉडल्स की फ़ॉलबैक लिस्ट
+                # 🔄 Latest Google GenAI Models (Updated as per API Recommendation)
         models_to_try = [
-            'gemini-2.5-flash',
-            'gemini-2.5-pro'
+            'gemini-3.1-pro-preview',
+            'gemini-3.1-flash-preview',
+            'gemini-2.0-flash',
+            'gemini-1.5-flash'
         ]
+        
         
         response = None
         last_error = None
