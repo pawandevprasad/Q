@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Complete Property Automation Tool</title>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+  
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 15px;
+      background-color: #f1f3f6;
+      max-width: 500px;
+      margin: 0 auto;
+      color: #333;
+    }
+    
+    .card-box {
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      margin-bottom: 20px;
+    }
+
+    .main-title {
+      font-size: 20px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 15px;
+      color: #111827;
+    }
+
+    .control-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: #374151; }
+    input[type="text"], input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #fff;
+    }
+    input[type="range"] { width: 100%; cursor: pointer; }
+
+    .btn-blue {
+      width: 100%;
+      background-color: #2563eb;
+      color: white;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .btn-blue:hover { background-color: #1d4ed8; }
+
+    .btn-green {
+      width: 100%;
+      background-color: #10b981;
+      color: white;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .btn-green:hover { background-color: #059669; }
+
+    .btn-purple {
+      width: 100%;
+      background-color: #8b5cf6;
+      color: white;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+    .btn-purple:hover { background-color: #7c3aed; }
+
+    #gallery {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .editor-card {
+      background: #fff;
+      padding: 15px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+      width: 100%;
+    }
+    .card-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+      font-size: 15px;
+      color: #2563eb;
+      text-align: center;
+    }
+    .crop-container {
+      width: 100%;
+      background: #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .crop-container img { max-width: 100%; display: block; }
+
+    .preview-container {
+      position: relative;
+      width: 100%;
+      margin-top: 10px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #e5e7eb;
+      touch-action: pan-y;
+    }
+    .preview-container canvas { display: block; width: 100%; height: auto; pointer-events: none; }
+
+    .watermark-overlay {
+      position: absolute;
+      color: white;
+      text-shadow: 0px 0px 4px rgba(0,0,0,0.8);
+      cursor: move;
+      user-select: none;
+      white-space: nowrap;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      touch-action: none;
+    }
+
+    #processedSection {
+      display: none;
+      margin-top: 20px;
+    }
+    .processed-heading {
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    .processed-grid {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+    .processed-card {
+      background: #fff;
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      position: relative;
+      width: 120px;
+      text-align: center;
+    }
+    .card-number {
+      font-size: 13px;
+      font-weight: bold;
+      color: #2563eb;
+      margin-bottom: 4px;
+    }
+    .remove-btn {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: #ef4444;
+      color: white;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .processed-img {
+      width: 100%;
+      height: 90px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+
+    .status-msg {
+      text-align: center;
+      font-weight: bold;
+      color: #2563eb;
+      margin-top: 10px;
+      font-size: 15px;
+    }
+
+    #urlListSection {
+      display: none;
+      margin-top: 15px;
+    }
+    .url-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .url-serial {
+      font-weight: bold;
+      color: #2563eb;
+      font-size: 14px;
+      width: 25px;
+    }
+    .url-input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #f9fafb;
+      font-size: 13px;
+      color: #374151;
+    }
+    .copy-single-btn {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #aiExtractSection, #jsonResultSection {
+      display: none;
+    }
+
+    .badge-box {
+      background-color: #e6f7f5;
+      color: #0f766e;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 18px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 250px;
+      background-color: #f8fafc;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 14px;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 13px;
+      color: #334155;
+      resize: vertical;
+      outline: none;
+    }
+    textarea:focus { border-color: #2563eb; background-color: #ffffff; }
+  </style>
+</head>
+<body>
+
+  <div class="card-box">
+    <div class="main-title">Crop & Watermark Tool</div>
+    <div class="control-group">
+      <label>1. Select Photos:</label>
+      <input type="file" id="imageInput" multiple accept="image/*">
+    </div>
+    <div class="control-group">
+      <label>2. Watermark Text:</label>
+      <input type="text" id="wmText" value="EstateX">
+    </div>
+    <div class="control-group">
+      <label>3. Text Size:</label>
+      <input type="range" id="wmSize" min="10" max="100" value="30">
+    </div>
+    <div class="control-group">
+      <label>4. Opacity:</label>
+      <input type="range" id="wmOpacity" min="0.1" max="1" step="0.05" value="0.7">
+    </div>
+    <button class="btn-blue" id="generateBtn">Apply Settings & Preview Photos</button>
+  </div>
+
+  <div id="gallery"></div>
+
+  <div id="processedSection" class="card-box">
+    <div class="processed-heading">Processed Photos Preview</div>
+    <div class="processed-grid" id="processedGrid"></div>
+    <button class="btn-green" id="getS3UrlsBtn">Get All AWS S3 URLs</button>
+    <div id="statusMsg" class="status-msg"></div>
+
+    <div id="urlListSection">
+      <div style="font-weight:bold; margin: 15px 0 10px 0; font-size:14px; color:#374151;">Generated AWS S3 URLs:</div>
+      <div id="urlRowsContainer"></div>
+      <button class="btn-purple" id="copyAllUrlsBtn">Copy All URLs</button>
+    </div>
+  </div>
+
+  <div id="aiExtractSection" class="card-box" style="border: 2px solid #8b5cf6;">
+    <div class="main-title" style="color:#8b5cf6;">Step 2: Google Gemini AI Data Extraction</div>
+    <p style="font-size:13px; color:#6b7280; margin-bottom:15px; text-align:center;">Original property detail screenshots upload karein JSON extract karne ke liye.</p>
+    <div class="control-group">
+      <label>Select Original Property Detail Photos:</label>
+      <input type="file" id="dataImagesInput" multiple accept="image/*">
+    </div>
+    <button class="btn-purple" id="extractJsonBtn">Extract Property JSON with Gemini AI</button>
+    <div id="aiStatusMsg" class="status-msg"></div>
+  </div>
+
+  <div id="jsonResultSection" class="card-box">
+    <div class="main-title" style="text-align:left;">JSON Data Entry</div>
+    <div class="badge-box">
+      Database: {{ db_name }} |<br>
+      Collection: {{ collection_name }}
+    </div>
+    <div class="control-group">
+      <textarea id="jsonDataInput" spellcheck="false"></textarea>
+    </div>
+    <button class="btn-blue" id="submitDbBtn">Submit to Database</button>
+    <div id="dbStatusMsg" class="status-msg"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+  <script>
+    const imageInput = document.getElementById('imageInput');
+    const wmText = document.getElementById('wmText');
+    const wmSize = document.getElementById('wmSize');
+    const wmOpacity = document.getElementById('wmOpacity');
+    const generateBtn = document.getElementById('generateBtn');
+    const gallery = document.getElementById('gallery');
+    
+    const processedSection = document.getElementById('processedSection');
+    const processedGrid = document.getElementById('processedGrid');
+    const getS3UrlsBtn = document.getElementById('getS3UrlsBtn');
+    const statusMsg = document.getElementById('statusMsg');
+    
+    const urlListSection = document.getElementById('urlListSection');
+    const urlRowsContainer = document.getElementById('urlRowsContainer');
+    const copyAllUrlsBtn = document.getElementById('copyAllUrlsBtn');
+    
+    const aiExtractSection = document.getElementById('aiExtractSection');
+    const dataImagesInput = document.getElementById('dataImagesInput');
+    const extractJsonBtn = document.getElementById('extractJsonBtn');
+    const aiStatusMsg = document.getElementById('aiStatusMsg');
+    
+    const jsonResultSection = document.getElementById('jsonResultSection');
+    const jsonDataInput = document.getElementById('jsonDataInput');
+    const submitDbBtn = document.getElementById('submitDbBtn');
+    const dbStatusMsg = document.getElementById('dbStatusMsg');
+
+    let cropperInstances = [];
+    let wmPositions = [];
+    let processedBlobs = [];
+    let uploadedS3Urls = [];
+
+    const readFileAsDataURL = (file) => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+    };
+
+    imageInput.addEventListener('change', async (e) => {
+      cropperInstances.forEach(inst => inst && inst.destroy());
+      cropperInstances = [];
+      wmPositions = [];
+      processedBlobs = [];
+      gallery.innerHTML = '';
+      processedSection.style.display = 'none';
+      urlListSection.style.display = 'none';
+      aiExtractSection.style.display = 'none';
+      jsonResultSection.style.display = 'none';
+      processedGrid.innerHTML = '';
+      statusMsg.innerText = '';
+
+      let files = Array.from(e.target.files);
+      if (files.length === 0) return;
+
+      files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+      for (let i = 0; i < files.length; i++) {
+        const imgSrc = await readFileAsDataURL(files[i]);
+        wmPositions[i] = { x: 0.5, y: 0.5 };
+        buildCard(i, imgSrc);
+      }
+    });
+
+    function buildCard(index, imgSrc) {
+      const card = document.createElement('div');
+      card.className = 'editor-card';
+
+      card.innerHTML = `
+        <div class="card-title">Photo #${index + 1} - Adjust Crop Area</div>
+        <div class="crop-container">
+          <img id="crop-img-${index}" src="${imgSrc}">
+        </div>
+        <div class="card-title" style="margin-top:12px; color:#10b981;">Watermark Position</div>
+        <div class="preview-container" id="wrapper-${index}"></div>
+      `;
+
+      gallery.appendChild(card);
+      const imageEl = document.getElementById(`crop-img-${index}`);
+      
+      const cropper = new Cropper(imageEl, {
+        viewMode: 1,
+        autoCropArea: 0.85,
+        background: false,
+        zoomable: false,
+        movable: false,
+        rotatable: false,
+        scalable: false,
+        cropend() { renderPreview(index); },
+        ready() { renderPreview(index); }
+      });
+
+      cropperInstances[index] = cropper;
+    }
+
+    function renderPreview(index) {
+      const wrapper = document.getElementById(`wrapper-${index}`);
+      if (!wrapper) return;
+      wrapper.innerHTML = '';
+
+      const cropper = cropperInstances[index];
+      if (!cropper) return;
+
+      const croppedCanvas = cropper.getCroppedCanvas();
+      if (!croppedCanvas) return;
+
+      const previewCanvas = document.createElement('canvas');
+      const ctx = previewCanvas.getContext('2d');
+      
+      const maxDisplayWidth = 280;
+      const scale = Math.min(1, maxDisplayWidth / croppedCanvas.width);
+      previewCanvas.width = croppedCanvas.width * scale;
+      previewCanvas.height = croppedCanvas.height * scale;
+
+      ctx.drawImage(croppedCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
+      wrapper.appendChild(previewCanvas);
+
+      const overlay = document.createElement('div');
+      overlay.className = 'watermark-overlay';
+      overlay.innerText = wmText.value;
+      overlay.style.fontSize = `${wmSize.value * scale}px`;
+      overlay.style.opacity = wmOpacity.value;
+      
+      overlay.style.left = `${wmPositions[index].x * 100}%`;
+      overlay.style.top = `${wmPositions[index].y * 100}%`;
+
+      wrapper.appendChild(overlay);
+
+      let isWMDragging = false;
+      const onWMMove = (e) => {
+        if (!isWMDragging) return;
+        const rect = wrapper.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+        let x = (clientX - rect.left) / rect.width;
+        let y = (clientY - rect.top) / rect.height;
+
+        x = Math.max(0, Math.min(1, x));
+        y = Math.max(0, Math.min(1, y));
+
+        wmPositions[index] = { x, y };
+        overlay.style.left = `${x * 100}%`;
+        overlay.style.top = `${y * 100}%`;
+      };
+
+      const startWMDrag = (e) => { isWMDragging = true; e.stopPropagation(); };
+      const stopWMDrag = () => { isWMDragging = false; };
+
+      overlay.addEventListener('mousedown', startWMDrag);
+      overlay.addEventListener('touchstart', startWMDrag, { passive: true });
+      window.addEventListener('mousemove', onWMMove);
+      window.addEventListener('touchmove', onWMMove, { passive: true });
+      window.addEventListener('mouseup', stopWMDrag);
+      window.addEventListener('touchend', stopWMDrag);
+    }
+        function updateWatermarkPreviews() {
+      requestAnimationFrame(() => {
+        cropperInstances.forEach((_, index) => renderPreview(index));
+      });
+    }
+
+    wmText.addEventListener('input', updateWatermarkPreviews);
+    wmSize.addEventListener('input', updateWatermarkPreviews);
+    wmOpacity.addEventListener('input', updateWatermarkPreviews);
+
+    function getFinalImageBlob(index) {
+      return new Promise((resolve) => {
+        const cropper = cropperInstances[index];
+        if (!cropper) return resolve(null);
+        
+        const srcCanvas = cropper.getCroppedCanvas();
+        if (!srcCanvas) return resolve(null);
+
+        const outCanvas = document.createElement('canvas');
+        const ctx = outCanvas.getContext('2d');
+
+        outCanvas.width = srcCanvas.width;
+        outCanvas.height = srcCanvas.height;
+        ctx.drawImage(srcCanvas, 0, 0);
+
+        const pos = wmPositions[index];
+        const fontSize = parseInt(wmSize.value, 10) * (srcCanvas.width / 280);
+        
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${wmOpacity.value})`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        ctx.shadowBlur = fontSize * 0.1;
+
+        ctx.fillText(wmText.value, pos.x * outCanvas.width, pos.y * outCanvas.height);
+        outCanvas.toBlob((blob) => resolve(blob), 'image/png');
+      });
+    }
+
+    generateBtn.addEventListener('click', async () => {
+      if (cropperInstances.length === 0) return alert('Please select photos first!');
+
+      processedGrid.innerHTML = '';
+      processedBlobs = [];
+      urlListSection.style.display = 'none';
+      aiExtractSection.style.display = 'none';
+      jsonResultSection.style.display = 'none';
+      statusMsg.innerText = '';
+
+      for (let index = 0; index < cropperInstances.length; index++) {
+        if (!cropperInstances[index]) continue;
+        const blob = await getFinalImageBlob(index);
+        if (!blob) continue;
+
+        processedBlobs.push(blob);
+        const currentSerial = processedBlobs.length;
+
+        const card = document.createElement('div');
+        card.className = 'processed-card';
+        card.innerHTML = `
+          <div class="card-number">#${currentSerial}</div>
+          <button class="remove-btn" title="Remove Photo">✕</button>
+          <img class="processed-img" src="${URL.createObjectURL(blob)}">
+        `;
+
+        card.querySelector('.remove-btn').addEventListener('click', () => {
+          const blobIndex = processedBlobs.indexOf(blob);
+          if (blobIndex > -1) processedBlobs.splice(blobIndex, 1);
+          card.remove();
+          if (processedBlobs.length === 0) processedSection.style.display = 'none';
+        });
+
+        processedGrid.appendChild(card);
+      }
+      
+      if (processedBlobs.length > 0) {
+        processedSection.style.display = 'block';
+        processedSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+
+    getS3UrlsBtn.addEventListener('click', async () => {
+      if (processedBlobs.length === 0) return alert('No processed photos to upload!');
+
+      getS3UrlsBtn.disabled = true;
+      getS3UrlsBtn.innerText = 'Uploading to AWS S3...';
+      statusMsg.innerText = 'Uploading to AWS S3...';
+
+      const formData = new FormData();
+      processedBlobs.forEach((blob, i) => {
+        formData.append('images', blob, `photo_${Date.now()}_${String(i + 1).padStart(3, '0')}.png`);
+      });
+
+      try {
+        const res = await fetch('/api/upload-s3', { method: 'POST', body: formData });
+        const resData = await res.json();
+
+        if (resData.success && resData.urls) {
+          uploadedS3Urls = resData.urls;
+          urlRowsContainer.innerHTML = '';
+          
+          uploadedS3Urls.forEach((url, i) => {
+            const row = document.createElement('div');
+            row.className = 'url-row';
+            row.innerHTML = `
+              <div class="url-serial">#${i + 1}</div>
+              <input type="text" class="url-input" value="${url}" readonly>
+              <button class="copy-single-btn">Copy</button>
+            `;
+
+            const btn = row.querySelector('.copy-single-btn');
+            btn.addEventListener('click', () => {
+              navigator.clipboard.writeText(url);
+              btn.innerText = 'Copied!';
+              btn.style.background = '#10b981';
+              setTimeout(() => { btn.innerText = 'Copy'; btn.style.background = '#2563eb'; }, 2000);
+            });
+            urlRowsContainer.appendChild(row);
+          });
+
+          statusMsg.innerText = 'All AWS S3 URLs Generated Successfully!';
+          urlListSection.style.display = 'block';
+          aiExtractSection.style.display = 'block';
+          aiExtractSection.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          alert(`S3 Upload Failed: ${resData.error || 'Unknown error'}`);
+          statusMsg.innerText = 'Upload Failed!';
+        }
+      } catch (err) {
+        alert('Network or Server Error!');
+        statusMsg.innerText = 'Upload Failed!';
+      } finally {
+        getS3UrlsBtn.disabled = false;
+        getS3UrlsBtn.innerText = 'Get All AWS S3 URLs';
+      }
+    });
+
+    extractJsonBtn.addEventListener('click', async () => {
+      const dataFiles = dataImagesInput.files;
+      if (dataFiles.length === 0) return alert('Please select property detail photos for AI extraction!');
+
+      extractJsonBtn.disabled = true;
+      extractJsonBtn.innerText = 'Extracting with Gemini AI...';
+      aiStatusMsg.innerText = 'Extracting property details...';
+
+      const formData = new FormData();
+      for (let i = 0; i < dataFiles.length; i++) {
+        formData.append('data_images', dataFiles[i]);
+      }
+      formData.append('s3_urls', JSON.stringify(uploadedS3Urls));
+
+      try {
+        const response = await fetch('/api/extract-json', { method: 'POST', body: formData });
+        const result = await response.json();
+
+        if (result.success) {
+          aiStatusMsg.innerText = 'JSON Extracted Successfully!';
+          jsonDataInput.value = JSON.stringify(result.result || result.data, null, 2);
+          jsonResultSection.style.display = 'block';
+          jsonResultSection.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          alert(`Extraction Failed: ${result.error || 'Unknown error'}`);
+          aiStatusMsg.innerText = 'Extraction Failed!';
+        }
+      } catch (err) {
+        alert('AI Extraction Error!');
+        aiStatusMsg.innerText = 'Extraction Failed!';
+      } finally {
+        extractJsonBtn.disabled = false;
+        extractJsonBtn.innerText = 'Extract Property JSON with Gemini AI';
+      }
+    });
+
+    submitDbBtn.addEventListener('click', async () => {
+      const rawText = jsonDataInput.value.trim();
+      if (!rawText) return alert('JSON data field is empty!');
+
+      submitDbBtn.disabled = true;
+      submitDbBtn.innerText = 'Submitting to Database...';
+      dbStatusMsg.innerText = '';
+
+      try {
+        const response = await fetch('/api/submit-to-db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ json_data: rawText })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          dbStatusMsg.className = 'status-msg success';
+          dbStatusMsg.style.color = '#16a34a';
+          dbStatusMsg.innerText = result.message;
+        } else {
+          dbStatusMsg.className = 'status-msg error';
+          dbStatusMsg.style.color = '#dc2626';
+          dbStatusMsg.innerText = result.error || 'Failed to submit data.';
+        }
+      } catch (err) {
+        dbStatusMsg.className = 'status-msg error';
+        dbStatusMsg.style.color = '#dc2626';
+        dbStatusMsg.innerText = 'Network error or server unreachable!';
+      } finally {
+        submitDbBtn.disabled = false;
+        submitDbBtn.innerText = 'Submit to Database';
+      }
+    });
+  </script>
+</body>
+</html>
