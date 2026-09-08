@@ -50,7 +50,7 @@ s3_client = boto3.client(
 ai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
-# --- HELPER FUNCTION: Enforce All Custom Business Rules ---
+# --- HELPER FUNCTION: Enforce Rules & Logic ---
 def process_and_enforce_rules(data, s3_urls):
     if isinstance(data, str):
         try:
@@ -81,7 +81,7 @@ def process_and_enforce_rules(data, s3_urls):
 
     balconies_val = "2" if bath_num >= 4 else "1"
 
-    # --- RULE 2: Built-up / Carpet / Super Built-up Area Math ---
+    # --- RULE 2: Area Math Calculation (Carpet = 80%, Super Builtup = 125%) ---
     builtup = str(spec.get("builtup_sqft", "na")).strip()
     carpet = str(spec.get("carpet_sqft", "na")).strip()
     super_built = str(spec.get("super_builtup_sqft", "na")).strip()
@@ -97,7 +97,6 @@ def process_and_enforce_rules(data, s3_urls):
     c_num = extract_number(carpet)
     s_num = extract_number(super_built)
 
-    # Carpet = 80% Builtup, Super Builtup = 125% Builtup
     if b_num is not None:
         if c_num is None: c_num = round(b_num * 0.8, 2)
         if s_num is None: s_num = round(b_num * 1.25, 2)
@@ -112,17 +111,27 @@ def process_and_enforce_rules(data, s3_urls):
     final_carpet = str(int(c_num)) if c_num else "na"
     final_super = str(int(s_num)) if s_num else "na"
 
-    # --- RULE 3: Location / Sub-locality / Full Address (Locality to Pincode) ---
+    # --- RULE 3: Construction Status & Property Age Logic ---
+    raw_status = str(spec.get("construction_status", "")).upper()
+    if "UNDER" in raw_status or "CONSTRUCTION" in raw_status:
+        construction_status = "UNDER_CONSTRUCTION"
+        property_age = "0"
+    elif "READY" in raw_status or "MOVE" in raw_status:
+        construction_status = "READY_TO_MOVE"
+        property_age = spec.get("property_age", "na")
+    else:
+        construction_status = spec.get("construction_status", "READY_TO_MOVE")
+        property_age = spec.get("property_age", "na")
+
+    # --- RULE 4: Location, Sub-Locality & Full Address ---
     locality_val = loc.get("locality", "na")
     city_val = loc.get("city", "Kolkata")
     state_val = loc.get("state", "West Bengal")
     pincode_val = str(loc.get("pincode", "na")).strip()
     landmark_val = loc.get("landmark", "na")
 
-    # Locality aur Sub-locality ek hi aayega
     sub_locality_val = locality_val
 
-    # Full address: Locality se lekar Pincode tak poora aayega
     addr_parts = []
     if locality_val != "na": addr_parts.append(locality_val)
     if city_val != "na": addr_parts.append(city_val)
@@ -134,32 +143,15 @@ def process_and_enforce_rules(data, s3_urls):
     else:
         full_addr = base_addr
 
-    # --- RULE 4: Title & Description Smart Generator Fallback ---
-    raw_title = td.get("title", "na")
-    raw_desc = td.get("description", "na")
+    # --- RULE 5: BHK Numeric Calculation ---
+    raw_bhk = spec.get("bhk_type", "na")
+    bhk_num_val = spec.get("bhk_numeric", "na")
+    if (bhk_num_val == "na" or not bhk_num_val) and raw_bhk != "na":
+        extracted_digits = ''.join(filter(str.isdigit, str(raw_bhk)))
+        if extracted_digits:
+            bhk_num_val = extracted_digits
 
-    bhk_str = spec.get("bhk_type", "na")
-    sub_type_str = cat.get("sub_type", "FLAT_APARTMENT").replace("_", " ").title()
-    price_str = prc.get("price_display", "na")
-
-    if not raw_title or str(raw_title).lower() in ["na", "none", "null"]:
-        if bhk_str != "na" and locality_val != "na":
-            raw_title = f"{bhk_str} {sub_type_str} for Sale in {locality_val}, {city_val}"
-        elif locality_val != "na":
-            raw_title = f"{sub_type_str} for Sale in {locality_val}"
-        else:
-            raw_title = "Residential Property for Sale"
-
-    if not raw_desc or str(raw_desc).lower() in ["na", "none", "null"]:
-        desc_parts = []
-        if bhk_str != "na": desc_parts.append(f"{bhk_str} {sub_type_str}")
-        if locality_val != "na": desc_parts.append(f"located in {locality_val}, {city_val}")
-        if price_str != "na": desc_parts.append(f"priced at {price_str}")
-        if final_super != "na": desc_parts.append(f"with Super Built-up Area of {final_super} sqft")
-        desc_parts.append("featuring modern amenities and excellent connectivity.")
-        raw_desc = " ".join(desc_parts)
-
-    # --- RULE 5: Smart Defaults ---
+    # --- RULE 6: Default Values ---
     parking_val = spec.get("parking", "YES")
     if not parking_val or str(parking_val).lower() in ["na", "none", "null"]:
         parking_val = "YES"
@@ -172,7 +164,7 @@ def process_and_enforce_rules(data, s3_urls):
     if not created_at_val or str(created_at_val).lower() in ["na", "none", "null"]:
         created_at_val = "few years"
 
-    # --- EXACT JSON OUTPUT ORDER ---
+    # --- EXACT JSON OUTPUT STRUCTURE ---
     return {
         "user_id": data.get("user_id", "ADMIN"),
         "posted_by_type": data.get("posted_by_type", "ADMIN"),
@@ -187,8 +179,8 @@ def process_and_enforce_rules(data, s3_urls):
             "owner_type": cnt.get("owner_type", "AGENT")
         },
         "title_and_description": {
-            "title": raw_title,
-            "description": raw_desc
+            "title": td.get("title", "na"),
+            "description": td.get("description", "na")
         },
         "location": {
             "city": city_val,
@@ -205,8 +197,8 @@ def process_and_enforce_rules(data, s3_urls):
             "is_negotiable": prc.get("is_negotiable", True)
         },
         "specifications": {
-            "bhk_type": spec.get("bhk_type", "na"),
-            "bhk_numeric": spec.get("bhk_numeric", "na"),
+            "bhk_type": raw_bhk,
+            "bhk_numeric": bhk_num_val,
             "builtup_sqft": final_builtup,
             "carpet_sqft": final_carpet,
             "super_builtup_sqft": final_super,
@@ -215,9 +207,9 @@ def process_and_enforce_rules(data, s3_urls):
             "bathrooms": str(bath_num),
             "balconies": balconies_val,
             "furnishing_status": spec.get("furnishing_status", "na"),
-            "construction_status": spec.get("construction_status", "na"),
+            "construction_status": construction_status,
             "facing_direction": facing_val,
-            "property_age": spec.get("property_age", "na"),
+            "property_age": property_age,
             "parking": parking_val,
             "ownership_type": spec.get("ownership_type", "FREEHOLD")
         },
@@ -272,15 +264,21 @@ def extract_json():
 
     try:
         prompt_text = """
-Extract ALL property details from all uploaded screenshots accurately.
-Rules:
-1. 'title': Extract the main bold property heading (e.g. 'Upohar The Condoville').
-2. 'description': Extract all descriptive lines from top to bottom across screenshots.
-3. 'contact': Extract owner_name (e.g. Mr Pradeep) and phone number.
-4. 'pricing': Extract price_display (e.g. ₹ 2.72 Crore) and numeric value.
-5. 'location': Extract 'locality' and 'city'. Use internal knowledge to find the correct 6-digit 'pincode' and nearest famous 'landmark' for this locality.
-6. 'specifications': Extract bhk_type, floor_no, total_floors, bathrooms, facing_direction, super_builtup_sqft, carpet_sqft, builtup_sqft, furnishing_status.
-7. Return strictly a raw JSON object without markdown fences (no ```json).
+Read all screenshots with extreme OCR accuracy and extract JSON data strictly based on these visual patterns:
+
+STRICT EXTRACTION RULES:
+1. 'title': Extract ONLY the main dark/bold property heading text (e.g. 'Upohar The Condoville'). Whatever is written in this main dark bold heading across any image must go into 'title'.
+2. 'description': Extract the full descriptive line written around/above the title (e.g. 'Flat for Resale in Upohar The Condoville, Garia, Kolkata'). STOP immediately after the city name (Kolkata).
+3. 'contact': Extract 'owner_name' (e.g. Mr Pradeep) and phone number without fail.
+4. 'pricing': Extract 'price_display' (e.g. ₹ 2.72 Crore) and 'price_numeric' (e.g. 27200000).
+5. 'location': Extract 'locality' and 'city'. Search web knowledge for the accurate 6-digit 'pincode' and nearest famous 'landmark' for this locality.
+6. 'specifications':
+   - 'bhk_type': Extract BHK text (e.g. '4 BHK').
+   - 'bhk_numeric': Extract numeric value of BHK (e.g. '4').
+   - 'construction_status': If 'Ready To Move', set 'READY_TO_MOVE'. If 'Under Construction', set 'UNDER_CONSTRUCTION'.
+   - 'property_age': Extract age text (e.g., '5-10 Year Old Property'). If 'Under Construction', age must be '0'.
+   - Extract floor_no, total_floors, bathrooms, facing_direction, super_builtup_sqft, carpet_sqft, builtup_sqft, furnishing_status.
+7. Return strictly raw JSON without markdown code fences (no ```json).
 """
 
         contents = [prompt_text]
@@ -288,10 +286,10 @@ Rules:
         for file in data_files:
             img = Image.open(file.stream)
             img = img.convert("RGB")
-            img.thumbnail((800, 800))
+            img.thumbnail((1200, 1200))
             
             byte_arr = io.BytesIO()
-            img.save(byte_arr, format='JPEG', quality=85)
+            img.save(byte_arr, format='JPEG', quality=90)
             image_bytes = byte_arr.getvalue()
 
             contents.append(
