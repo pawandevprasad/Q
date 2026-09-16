@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Complete Property Automation Tool</title>
+  <title>Crop & Watermark Tool</title>
   
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
   
@@ -237,36 +237,6 @@
       cursor: pointer;
       font-size: 13px;
     }
-
-    #aiExtractSection, #jsonResultSection {
-      display: none;
-    }
-
-    .badge-box {
-      background-color: #e6f7f5;
-      color: #0f766e;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      line-height: 1.4;
-      margin-bottom: 18px;
-    }
-
-    textarea {
-      width: 100%;
-      height: 250px;
-      background-color: #f8fafc;
-      border: 1.5px solid #cbd5e1;
-      border-radius: 12px;
-      padding: 14px;
-      font-family: "Courier New", Courier, monospace;
-      font-size: 13px;
-      color: #334155;
-      resize: vertical;
-      outline: none;
-    }
-    textarea:focus { border-color: #2563eb; background-color: #ffffff; }
   </style>
 </head>
 <body>
@@ -307,30 +277,6 @@
     </div>
   </div>
 
-  <div id="aiExtractSection" class="card-box" style="border: 2px solid #8b5cf6;">
-    <div class="main-title" style="color:#8b5cf6;">Step 2: Google Gemini AI Data Extraction</div>
-    <p style="font-size:13px; color:#6b7280; margin-bottom:15px; text-align:center;">Original property detail screenshots upload karein JSON extract karne ke liye.</p>
-    <div class="control-group">
-      <label>Select Original Property Detail Photos:</label>
-      <input type="file" id="dataImagesInput" multiple accept="image/*">
-    </div>
-    <button class="btn-purple" id="extractJsonBtn">Extract Property JSON with Gemini AI</button>
-    <div id="aiStatusMsg" class="status-msg"></div>
-  </div>
-
-  <div id="jsonResultSection" class="card-box">
-    <div class="main-title" style="text-align:left;">JSON Data Entry</div>
-    <div class="badge-box">
-      Database: {{ db_name }} |<br>
-      Collection: {{ collection_name }}
-    </div>
-    <div class="control-group">
-      <textarea id="jsonDataInput" spellcheck="false"></textarea>
-    </div>
-    <button class="btn-blue" id="submitDbBtn">Submit to Database</button>
-    <div id="dbStatusMsg" class="status-msg"></div>
-  </div>
-
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 
   <script>
@@ -349,16 +295,6 @@
     const urlListSection = document.getElementById('urlListSection');
     const urlRowsContainer = document.getElementById('urlRowsContainer');
     const copyAllUrlsBtn = document.getElementById('copyAllUrlsBtn');
-    
-    const aiExtractSection = document.getElementById('aiExtractSection');
-    const dataImagesInput = document.getElementById('dataImagesInput');
-    const extractJsonBtn = document.getElementById('extractJsonBtn');
-    const aiStatusMsg = document.getElementById('aiStatusMsg');
-    
-    const jsonResultSection = document.getElementById('jsonResultSection');
-    const jsonDataInput = document.getElementById('jsonDataInput');
-    const submitDbBtn = document.getElementById('submitDbBtn');
-    const dbStatusMsg = document.getElementById('dbStatusMsg');
 
     let cropperInstances = [];
     let wmPositions = [];
@@ -381,14 +317,13 @@
       gallery.innerHTML = '';
       processedSection.style.display = 'none';
       urlListSection.style.display = 'none';
-      aiExtractSection.style.display = 'none';
-      jsonResultSection.style.display = 'none';
       processedGrid.innerHTML = '';
       statusMsg.innerText = '';
 
       let files = Array.from(e.target.files);
       if (files.length === 0) return;
 
+      // सीरियल ऑर्डर (संख्यात्मक / वर्णमाला क्रम) में फाइलें व्यवस्थित करना
       files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
       for (let i = 0; i < files.length; i++) {
@@ -531,43 +466,48 @@
       });
     }
 
-    generateBtn.addEventListener('click', async () => {
-      if (cropperInstances.length === 0) return alert('Please select photos first!');
-
+    // डिलीट करने के बाद सीरियल नंबर ऑटो-रीइंडेक्स
+    function renderProcessedGrid() {
       processedGrid.innerHTML = '';
-      processedBlobs = [];
-      urlListSection.style.display = 'none';
-      aiExtractSection.style.display = 'none';
-      jsonResultSection.style.display = 'none';
-      statusMsg.innerText = '';
-
-      for (let index = 0; index < cropperInstances.length; index++) {
-        if (!cropperInstances[index]) continue;
-        const blob = await getFinalImageBlob(index);
-        if (!blob) continue;
-
-        processedBlobs.push(blob);
-        const currentSerial = processedBlobs.length;
-
+      processedBlobs.forEach((blob, idx) => {
         const card = document.createElement('div');
         card.className = 'processed-card';
         card.innerHTML = `
-          <div class="card-number">#${currentSerial}</div>
+          <div class="card-number">#${idx + 1}</div>
           <button class="remove-btn" title="Remove Photo">✕</button>
           <img class="processed-img" src="${URL.createObjectURL(blob)}">
         `;
 
         card.querySelector('.remove-btn').addEventListener('click', () => {
-          const blobIndex = processedBlobs.indexOf(blob);
-          if (blobIndex > -1) processedBlobs.splice(blobIndex, 1);
-          card.remove();
-          if (processedBlobs.length === 0) processedSection.style.display = 'none';
+          processedBlobs.splice(idx, 1);
+          if (processedBlobs.length === 0) {
+            processedSection.style.display = 'none';
+          } else {
+            renderProcessedGrid();
+          }
         });
 
         processedGrid.appendChild(card);
+      });
+    }
+
+    generateBtn.addEventListener('click', async () => {
+      if (cropperInstances.length === 0) return alert('Please select photos first!');
+
+      processedBlobs = [];
+      urlListSection.style.display = 'none';
+      statusMsg.innerText = '';
+
+      for (let index = 0; index < cropperInstances.length; index++) {
+        if (!cropperInstances[index]) continue;
+        const blob = await getFinalImageBlob(index);
+        if (blob) {
+          processedBlobs.push(blob);
+        }
       }
       
       if (processedBlobs.length > 0) {
+        renderProcessedGrid();
         processedSection.style.display = 'block';
         processedSection.scrollIntoView({ behavior: 'smooth' });
       }
@@ -581,8 +521,10 @@
       statusMsg.innerText = 'Uploading to AWS S3...';
 
       const formData = new FormData();
+      const timestamp = Date.now();
+      
       processedBlobs.forEach((blob, i) => {
-        formData.append('images', blob, `photo_${Date.now()}_${String(i + 1).padStart(3, '0')}.png`);
+        formData.append('images', blob, `photo_${timestamp}_${String(i + 1).padStart(3, '0')}.png`);
       });
 
       try {
@@ -614,8 +556,7 @@
 
           statusMsg.innerText = 'All AWS S3 URLs Generated Successfully!';
           urlListSection.style.display = 'block';
-          aiExtractSection.style.display = 'block';
-          aiExtractSection.scrollIntoView({ behavior: 'smooth' });
+          urlListSection.scrollIntoView({ behavior: 'smooth' });
         } else {
           alert(`S3 Upload Failed: ${resData.error || 'Unknown error'}`);
           statusMsg.innerText = 'Upload Failed!';
@@ -629,88 +570,12 @@
       }
     });
 
-      copyAllUrlsBtn.addEventListener('click', () => {
+    copyAllUrlsBtn.addEventListener('click', () => {
       if (uploadedS3Urls.length === 0) return;
-      navigator.clipboard.writeText(uploadedS3Urls.join('\n'));
+      navigator.clipboard.writeText(JSON.stringify(uploadedS3Urls, null, 2));
       copyAllUrlsBtn.innerText = 'All URLs Copied!';
-      copyAllUrlsBtn.style.background = '#10b981';
-      setTimeout(() => {
-        copyAllUrlsBtn.innerText = 'Copy All URLs';
-        copyAllUrlsBtn.style.background = '#8b5cf6';
-      }, 2000);
-    });
-
-    extractJsonBtn.addEventListener('click', async () => {
-      const dataFiles = dataImagesInput.files;
-      if (dataFiles.length === 0) return alert('Please select property detail photos for AI extraction!');
-
-      extractJsonBtn.disabled = true;
-      extractJsonBtn.innerText = 'Extracting with Gemini AI...';
-      aiStatusMsg.innerText = 'Extracting property details...';
-
-      const formData = new FormData();
-      for (let i = 0; i < dataFiles.length; i++) {
-        formData.append('data_images', dataFiles[i]);
-      }
-      formData.append('s3_urls', JSON.stringify(uploadedS3Urls));
-
-      try {
-        const response = await fetch('/api/extract-json', { method: 'POST', body: formData });
-        const result = await response.json();
-
-        if (result.success) {
-          aiStatusMsg.innerText = 'JSON Extracted Successfully!';
-          jsonDataInput.value = JSON.stringify(result.data, null, 2);
-          jsonResultSection.style.display = 'block';
-          jsonResultSection.scrollIntoView({ behavior: 'smooth' });
-        } else {
-          alert(`Extraction Failed: ${result.error || 'Unknown error'}`);
-          aiStatusMsg.innerText = 'Extraction Failed!';
-        }
-      } catch (err) {
-        alert('AI Extraction Error!');
-        aiStatusMsg.innerText = 'Extraction Failed!';
-      } finally {
-        extractJsonBtn.disabled = false;
-        extractJsonBtn.innerText = 'Extract Property JSON with Gemini AI';
-      }
-    });
-
-    submitDbBtn.addEventListener('click', async () => {
-      const rawText = jsonDataInput.value.trim();
-      if (!rawText) return alert('JSON data field is empty!');
-
-      submitDbBtn.disabled = true;
-      submitDbBtn.innerText = 'Submitting to Database...';
-      dbStatusMsg.innerText = '';
-
-      try {
-        const response = await fetch('/api/submit-to-db', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ json_data: rawText })
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          dbStatusMsg.className = 'status-msg success';
-          dbStatusMsg.style.color = '#16a34a';
-          dbStatusMsg.innerText = result.message;
-        } else {
-          dbStatusMsg.className = 'status-msg error';
-          dbStatusMsg.style.color = '#dc2626';
-          dbStatusMsg.innerText = result.error || 'Failed to submit data.';
-        }
-      } catch (err) {
-        dbStatusMsg.className = 'status-msg error';
-        dbStatusMsg.style.color = '#dc2626';
-        dbStatusMsg.innerText = 'Network error or server unreachable!';
-      } finally {
-        submitDbBtn.disabled = false;
-        submitDbBtn.innerText = 'Submit to Database';
-      }
+      setTimeout(() => { copyAllUrlsBtn.innerText = 'Copy All URLs'; }, 2000);
     });
   </script>
 </body>
 </html>
-
