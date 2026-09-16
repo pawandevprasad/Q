@@ -98,6 +98,7 @@
       border-radius: 12px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.08);
       width: 100%;
+      position: relative;
     }
     .card-title {
       font-weight: bold;
@@ -106,6 +107,18 @@
       color: #2563eb;
       text-align: center;
     }
+
+    .serial-badge {
+      display: inline-block;
+      background: #2563eb;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+      margin-right: 6px;
+    }
+
     .crop-container {
       width: 100%;
       background: #e5e7eb;
@@ -277,6 +290,7 @@
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 
   <script>
@@ -323,7 +337,7 @@
       let files = Array.from(e.target.files);
       if (files.length === 0) return;
 
-      // सीरियल ऑर्डर (संख्यात्मक / वर्णमाला क्रम) में फाइलें व्यवस्थित करना
+      // फाइलों के नाम के क्रम (Numerically) से सॉर्ट करना
       files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
       for (let i = 0; i < files.length; i++) {
@@ -338,7 +352,9 @@
       card.className = 'editor-card';
 
       card.innerHTML = `
-        <div class="card-title">Photo #${index + 1} - Adjust Crop Area</div>
+        <div class="card-title">
+          <span class="serial-badge">✓ #${index + 1}</span> Adjust Crop Area
+        </div>
         <div class="crop-container">
           <img id="crop-img-${index}" src="${imgSrc}">
         </div>
@@ -466,7 +482,6 @@
       });
     }
 
-    // डिलीट करने के बाद सीरियल नंबर ऑटो-रीइंडेक्स
     function renderProcessedGrid() {
       processedGrid.innerHTML = '';
       processedBlobs.forEach((blob, idx) => {
