@@ -45,7 +45,7 @@ def upload_s3():
     
     files = request.files.getlist('images')
     
-    # क्रम (order) बनाए रखने के लिए फाइलों को उनके नाम के अनुसार शॉट करें
+    # सीरियल ऑर्डर बनाए रखने के लिए नाम के आधार पर सॉर्ट करना
     files.sort(key=lambda f: f.filename)
     
     uploaded_urls = []
@@ -69,3 +69,4 @@ def upload_s3():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+    
